@@ -1,0 +1,30 @@
+{
+  "id": "chatcmpl-test-123",
+  "model": "sonar-pro",
+  "created": 1709251200,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Rust is a systems programming language focused on safety, speed, and concurrency."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 20,
+    "total_tokens": 35,
+    "cost": {
+      "input_tokens_cost": 0.000045,
+      "output_tokens_cost": 0.0003,
+      "total_cost": 0.005345,
+      "request_cost": 0.005
+    }
+  },
+  "citations": [
+    "https://www.rust-lang.org/",
+    "https://doc.rust-lang.org/book/"
+  ]
+}
