@@ -176,10 +176,7 @@ async fn test_api_client_streaming() {
 
     Mock::given(method("POST"))
         .and(path("/chat/completions"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_raw(sse_body, "text/event-stream"),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(sse_body, "text/event-stream"))
         .mount(&mock_server)
         .await;
 

@@ -111,7 +111,12 @@ fn render_search_results(results: &[SearchResult], use_color: bool) {
     }
     for (i, r) in results.iter().enumerate() {
         if use_color {
-            println!("  [{}] {} - {}", (i + 1).dimmed(), r.title.bold(), r.url.cyan());
+            println!(
+                "  [{}] {} - {}",
+                (i + 1).dimmed(),
+                r.title.bold(),
+                r.url.cyan()
+            );
         } else {
             println!("  [{}] {} - {}", i + 1, r.title, r.url);
         }

@@ -134,8 +134,7 @@ async fn run_ask(query_parts: &[String], config: &ResolvedConfig) -> Result<()> 
     });
 
     // Build domain filter
-    let domain_filter =
-        build_domain_filter(&config.search_domains, &config.search_exclude_domains);
+    let domain_filter = build_domain_filter(&config.search_domains, &config.search_exclude_domains);
 
     let request = ChatCompletionRequest {
         model: config.model.clone(),
@@ -314,11 +313,12 @@ fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<
             let api_key = api_key.trim();
 
             if api_key.is_empty() {
-                anyhow::bail!("API key cannot be empty. Get one at https://www.perplexity.ai/settings/api");
+                anyhow::bail!(
+                    "API key cannot be empty. Get one at https://www.perplexity.ai/settings/api"
+                );
             }
 
-            std::fs::create_dir_all(&config_dir)
-                .context("Failed to create config directory")?;
+            std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
 
             let config_content = format!(
                 r#"[auth]
@@ -340,8 +340,7 @@ output = "md"
 "#
             );
 
-            std::fs::write(&config_path, config_content)
-                .context("Failed to write config file")?;
+            std::fs::write(&config_path, config_content).context("Failed to write config file")?;
 
             println!("Config created at: {}", config_path.display());
             println!("You're ready to go! Try: pplx \"What is Rust?\"");
@@ -374,10 +373,16 @@ output = "md"
             if !config.search_exclude_domains.is_empty() {
                 println!("  exclude:       {:?}", config.search_exclude_domains);
             }
-            println!("  api_key:       {}", if config.api_key.is_empty() { "(not set)" } else { "(set)" });
+            println!(
+                "  api_key:       {}",
+                if config.api_key.is_empty() {
+                    "(not set)"
+                } else {
+                    "(set)"
+                }
+            );
 
-            let config_path = dirs::config_dir()
-                .map(|d| d.join("pplx").join("config.toml"));
+            let config_path = dirs::config_dir().map(|d| d.join("pplx").join("config.toml"));
             if let Some(path) = config_path {
                 if path.exists() {
                     println!("\n  config file:   {}", path.display());

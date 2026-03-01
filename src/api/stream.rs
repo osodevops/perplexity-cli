@@ -39,9 +39,7 @@ impl ApiClient {
                     }
 
                     let chunk: ChatCompletionChunk = serde_json::from_str(&msg.data)
-                        .map_err(|e| {
-                            PplxError::Stream(format!("Failed to parse chunk: {e}"))
-                        })?;
+                        .map_err(|e| PplxError::Stream(format!("Failed to parse chunk: {e}")))?;
 
                     if model.is_empty() {
                         model = chunk.model.clone();

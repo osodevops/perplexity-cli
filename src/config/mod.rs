@@ -58,14 +58,11 @@ pub fn resolve(cli: &Cli, file: &FileConfig) -> Result<ResolvedConfig, PplxError
         .or_else(|| file.defaults.output.clone())
         .unwrap_or_else(|| "md".to_string());
 
-    let show_citations = cli.citations
-        || file.defaults.show_citations.unwrap_or(false);
+    let show_citations = cli.citations || file.defaults.show_citations.unwrap_or(false);
 
-    let show_cost =
-        cli.cost || file.defaults.show_cost.unwrap_or(false);
+    let show_cost = cli.cost || file.defaults.show_cost.unwrap_or(false);
 
-    let show_usage =
-        cli.usage || file.defaults.show_usage.unwrap_or(false);
+    let show_usage = cli.usage || file.defaults.show_usage.unwrap_or(false);
 
     let temperature = cli.temperature.or(file.defaults.temperature);
 
@@ -166,6 +163,9 @@ exclude_domains = ["pinterest.com"]
         assert_eq!(config.defaults.show_citations, Some(true));
         let search = config.defaults.search.unwrap();
         assert_eq!(search.mode.as_deref(), Some("academic"));
-        assert_eq!(search.domains.as_deref(), Some(&["arxiv.org".to_string()][..]));
+        assert_eq!(
+            search.domains.as_deref(),
+            Some(&["arxiv.org".to_string()][..])
+        );
     }
 }

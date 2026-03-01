@@ -16,10 +16,7 @@ pub fn render(usage: &Usage, use_color: bool) {
     }
 
     if let Some(v) = cost.input_tokens_cost {
-        println!(
-            "  Input tokens:     {:>6} (${:.6})",
-            usage.prompt_tokens, v
-        );
+        println!("  Input tokens:     {:>6} (${:.6})", usage.prompt_tokens, v);
     }
     if let Some(v) = cost.output_tokens_cost {
         println!(
