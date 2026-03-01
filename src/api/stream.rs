@@ -4,15 +4,18 @@ use reqwest_eventsource::{Event, EventSource};
 use crate::error::PplxError;
 
 use super::client::ApiClient;
+use super::think::{ThinkEvent, ThinkParser};
 use super::types::{ChatCompletionChunk, ChatCompletionRequest, StreamResult};
 
 impl ApiClient {
     /// Send a streaming chat completion request.
     /// Calls `on_token` for each content delta as it arrives.
+    /// Optionally calls `on_think_token` for content inside `<think>` blocks.
     pub async fn chat_completion_stream<F>(
         &self,
         request: &ChatCompletionRequest,
         mut on_token: F,
+        mut on_think_token: Option<&mut dyn FnMut(&str)>,
     ) -> Result<StreamResult, PplxError>
     where
         F: FnMut(&str),
@@ -23,12 +26,16 @@ impl ApiClient {
         let mut es = EventSource::new(req).map_err(|e| PplxError::Stream(e.to_string()))?;
 
         let mut content = String::new();
+        let mut thinking_content = String::new();
         let mut usage = None;
         let mut citations = None;
         let mut search_results = None;
         let mut images = None;
         let mut related_questions = None;
         let mut model = String::new();
+
+        let mut think_parser = ThinkParser::new();
+        let use_think_parser = on_think_token.is_some();
 
         while let Some(event) = es.next().await {
             match event {
@@ -47,8 +54,25 @@ impl ApiClient {
 
                     for choice in &chunk.choices {
                         if let Some(ref text) = choice.delta.content {
-                            on_token(text);
-                            content.push_str(text);
+                            if use_think_parser {
+                                for event in think_parser.feed(text) {
+                                    match event {
+                                        ThinkEvent::Normal(s) => {
+                                            on_token(&s);
+                                            content.push_str(&s);
+                                        }
+                                        ThinkEvent::Think(s) => {
+                                            if let Some(ref mut handler) = on_think_token {
+                                                handler(&s);
+                                            }
+                                            thinking_content.push_str(&s);
+                                        }
+                                    }
+                                }
+                            } else {
+                                on_token(text);
+                                content.push_str(text);
+                            }
                         }
                     }
 
@@ -104,10 +128,25 @@ impl ApiClient {
             }
         }
 
+        // Flush any remaining buffered content from the think parser
+        if use_think_parser {
+            for event in think_parser.flush() {
+                match event {
+                    ThinkEvent::Normal(s) => content.push_str(&s),
+                    ThinkEvent::Think(s) => thinking_content.push_str(&s),
+                }
+            }
+        }
+
         es.close();
 
         Ok(StreamResult {
             content,
+            thinking_content: if thinking_content.is_empty() {
+                None
+            } else {
+                Some(thinking_content)
+            },
             usage,
             citations,
             search_results,

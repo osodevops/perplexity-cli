@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "research-job-abc123",
+      "status": "completed",
+      "created_at": 1709251200
+    },
+    {
+      "id": "research-job-def456",
+      "status": "pending",
+      "created_at": 1709251300
+    }
+  ]
+}

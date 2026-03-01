@@ -3,7 +3,10 @@ pub mod json;
 pub mod markdown;
 pub mod plain;
 
-use crate::api::types::{ImageResult, SearchResult, Usage};
+use crate::api::types::{
+    AgentResponse, AsyncResearchListResponse, AsyncResearchStatusResponse, ImageResult,
+    SearchResponse, SearchResult, Usage,
+};
 
 /// Create a token handler based on output format.
 /// For JSON output in streaming mode, we still collect tokens silently.
@@ -13,6 +16,97 @@ pub fn create_token_handler(format: &str) -> Box<dyn FnMut(&str)> {
         "plain" | "raw" => plain::streaming_token_handler(),
         _ => markdown::streaming_token_handler(), // "md" and default
     }
+}
+
+/// A boxed mutable closure for handling token callbacks.
+pub type TokenHandler = Box<dyn FnMut(&str)>;
+
+/// Create a think token handler based on output format.
+/// Returns None for JSON (thinking content rendered in final JSON).
+pub fn create_think_token_handler(format: &str) -> Option<TokenHandler> {
+    match format {
+        "json" => None,
+        "plain" | "raw" => Some(plain::streaming_think_token_handler()),
+        _ => Some(markdown::streaming_think_token_handler()),
+    }
+}
+
+/// Render research job status.
+pub fn render_research_status(response: &AsyncResearchStatusResponse, format: &str) {
+    match format {
+        "json" => {
+            if let Ok(json) = serde_json::to_string_pretty(response) {
+                println!("{json}");
+            }
+        }
+        _ => {
+            println!("Job ID:  {}", response.id);
+            println!("Status:  {}", response.status);
+        }
+    }
+}
+
+/// Render research job list.
+pub fn render_research_list(response: &AsyncResearchListResponse, format: &str) {
+    match format {
+        "json" => {
+            if let Ok(json) = serde_json::to_string_pretty(response) {
+                println!("{json}");
+            }
+        }
+        _ => {
+            if response.items.is_empty() {
+                println!("No research jobs found.");
+                return;
+            }
+            for item in &response.items {
+                let ts = item
+                    .created_at
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+                println!("  {} [{}] created={}", item.id, item.status, ts);
+            }
+        }
+    }
+}
+
+/// Extract text content from an AgentResponse.
+pub fn extract_agent_text(response: &AgentResponse) -> String {
+    let mut parts = Vec::new();
+    for item in &response.output {
+        if let Some(ref text) = item.text {
+            parts.push(text.clone());
+        }
+        if let Some(ref content) = item.content {
+            for c in content {
+                if let Some(ref text) = c.text {
+                    parts.push(text.clone());
+                }
+            }
+        }
+    }
+    parts.join("")
+}
+
+/// Extract citation URLs from an AgentResponse.
+pub fn extract_agent_citations(response: &AgentResponse) -> Vec<String> {
+    let mut urls = Vec::new();
+    for item in &response.output {
+        if let Some(ref content) = item.content {
+            for c in content {
+                if let Some(ref annotations) = c.annotations {
+                    for ann in annotations {
+                        if let Some(ref url) = ann.url {
+                            if !urls.contains(url) {
+                                urls.push(url.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    urls
 }
 
 /// Options for rendering final metadata after the response.
@@ -72,6 +166,16 @@ pub fn render_final(opts: &RenderFinalOpts<'_>) {
     if opts.show_cost {
         if let Some(u) = opts.usage {
             crate::cost::render(u, opts.use_color);
+        }
+    }
+}
+
+/// Render search results in markdown/plain format.
+pub fn render_search_output(response: &SearchResponse, format: &str, use_color: bool) {
+    match format {
+        "json" => json::render_search_response(response),
+        _ => {
+            render_search_results(&response.results, use_color);
         }
     }
 }

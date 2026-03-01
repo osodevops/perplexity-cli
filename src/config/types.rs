@@ -53,8 +53,6 @@ pub struct ResolvedConfig {
     pub search_exclude_domains: Vec<String>,
     pub no_stream: bool,
     pub no_color: bool,
-    #[allow(dead_code)]
-    pub verbose: bool,
     pub max_tokens: Option<u32>,
     pub top_p: Option<f32>,
     pub reasoning_effort: Option<String>,
@@ -68,4 +66,7 @@ pub struct ResolvedConfig {
     pub before: Option<String>,
     pub updated_after: Option<String>,
     pub updated_before: Option<String>,
+    pub json_schema: Option<String>,
+    pub save: Option<String>,
+    pub show_reasoning: bool,
 }

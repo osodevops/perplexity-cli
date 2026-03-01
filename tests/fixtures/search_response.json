@@ -1,0 +1,29 @@
+{
+  "id": "search-abc123",
+  "server_time": "2024-06-15T14:30:00Z",
+  "results": [
+    {
+      "title": "Rust Programming Language",
+      "url": "https://www.rust-lang.org",
+      "date": "2024-06-01",
+      "last_updated": "2024-06-10",
+      "snippet": "A language empowering everyone to build reliable and efficient software.",
+      "source": "web"
+    },
+    {
+      "title": "Rust (programming language) - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+      "date": "2024-05-20",
+      "last_updated": "2024-06-12",
+      "snippet": "Rust is a multi-paradigm, general-purpose programming language that emphasizes performance, type safety, and concurrency.",
+      "source": "web"
+    },
+    {
+      "title": "The Rust Reference",
+      "url": "https://doc.rust-lang.org/reference/",
+      "date": "2024-04-15",
+      "snippet": "The Rust Reference is the primary reference for the Rust programming language.",
+      "source": "web"
+    }
+  ]
+}

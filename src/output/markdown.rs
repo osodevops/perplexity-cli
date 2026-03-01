@@ -10,6 +10,15 @@ pub fn streaming_token_handler() -> Box<dyn FnMut(&str)> {
     })
 }
 
+/// Create a token handler for thinking content in markdown mode (dimmed italic).
+pub fn streaming_think_token_handler() -> Box<dyn FnMut(&str)> {
+    use owo_colors::OwoColorize;
+    Box::new(|token: &str| {
+        print!("{}", token.dimmed().italic());
+        let _ = io::stdout().flush();
+    })
+}
+
 /// Render the full content as formatted markdown (--no-stream mode).
 pub fn render_full(content: &str, use_color: bool) {
     if use_color {

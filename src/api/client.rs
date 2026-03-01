@@ -12,8 +12,6 @@ const RETRY_BASE_MS: u64 = 500;
 pub struct ApiClient {
     pub(crate) client: reqwest::Client,
     pub(crate) base_url: String,
-    #[allow(dead_code)]
-    pub(crate) api_key: String,
 }
 
 impl ApiClient {
@@ -44,7 +42,6 @@ impl ApiClient {
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
         })
     }
 

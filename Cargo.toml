@@ -1,6 +1,6 @@
 [package]
 name = "pplx"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A high-performance Rust CLI for the Perplexity API"
 license = "MIT"
@@ -15,6 +15,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "pplx"
 path = "src/main.rs"
+
+[[bin]]
+name = "gen-man"
+path = "src/bin/gen-man.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -36,6 +40,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 anyhow = "1"
 is-terminal = "0.4"
+rustyline = "15"
+clap_mangen = "0.2"
+toml_edit = "0.22"
 
 [dev-dependencies]
 wiremock = "0.6"

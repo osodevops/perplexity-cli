@@ -12,15 +12,16 @@ pub enum PplxError {
     RateLimited { retry_after_secs: Option<u64> },
 
     #[error("Configuration error: {0}")]
-    #[allow(dead_code)]
     Config(String),
 
     #[error("Stream error: {0}")]
     Stream(String),
 
     #[error("Validation error: {0}")]
-    #[allow(dead_code)]
     Validation(String),
+
+    #[error("Research error: {0}")]
+    Research(String),
 
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),

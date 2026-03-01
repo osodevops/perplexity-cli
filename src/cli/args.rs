@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(
     name = "pplx",
     about = "A powerful Perplexity API client for the terminal",
-    version,
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("PPLX_GIT_HASH"), ")"),
     after_help = "Examples:\n  pplx \"What is Rust?\"\n  pplx ask -m sonar-pro \"Explain quantum computing\"\n  pplx ask --no-stream -o json \"test\" | jq .\n  echo \"summarize this\" | pplx ask\n  pplx completions zsh"
 )]
 pub struct Cli {
@@ -110,6 +110,10 @@ pub struct Cli {
     #[arg(long, global = true, value_enum)]
     pub reasoning_effort: Option<ReasoningEffort>,
 
+    /// Show reasoning/thinking blocks from reasoning models
+    #[arg(long, global = true)]
+    pub reasoning: bool,
+
     // --- Response enrichment ---
     /// Return image URLs
     #[arg(long, global = true)]
@@ -130,6 +134,14 @@ pub struct Cli {
     /// Enable search classifier
     #[arg(long, global = true)]
     pub smart_search: bool,
+
+    /// JSON schema for structured output (file path or inline JSON)
+    #[arg(long, global = true)]
+    pub json_schema: Option<String>,
+
+    /// Save response to file (format auto-detected from extension)
+    #[arg(long, global = true)]
+    pub save: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -143,16 +155,35 @@ pub enum Commands {
 
     /// Raw web search via Search API
     Search {
-        /// The search query
+        /// The search query (multiple values for multi-query)
         #[arg(trailing_var_arg = true)]
         query: Vec<String>,
+
+        /// Maximum results per query
+        #[arg(long)]
+        max_results: Option<u32>,
+
+        /// Maximum tokens per result page
+        #[arg(long)]
+        max_tokens_per_page: Option<u32>,
+
+        /// Country code for geo-filtering (e.g., US, GB)
+        #[arg(long)]
+        country: Option<String>,
     },
 
     /// Deep research with async support
     Research {
+        #[command(subcommand)]
+        action: Option<ResearchAction>,
+
         /// The research query
         #[arg(trailing_var_arg = true)]
         query: Vec<String>,
+
+        /// Submit and return immediately (don't wait for result)
+        #[arg(long = "async")]
+        async_mode: bool,
     },
 
     /// Use Agent API with third-party models
@@ -160,6 +191,14 @@ pub enum Commands {
         /// The query
         #[arg(trailing_var_arg = true)]
         query: Vec<String>,
+
+        /// Enable a tool (repeatable): web_search, fetch_url
+        #[arg(long = "tool")]
+        tools: Vec<String>,
+
+        /// Maximum agent steps
+        #[arg(long)]
+        max_steps: Option<u32>,
     },
 
     /// Start interactive REPL session
@@ -191,6 +230,22 @@ pub enum ConfigAction {
         key: String,
         /// Value to set
         value: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ResearchAction {
+    /// Check status of a research job
+    Status {
+        /// The research job ID
+        id: String,
+    },
+    /// List all research jobs
+    List,
+    /// Get result of a completed research job
+    Get {
+        /// The research job ID
+        id: String,
     },
 }
 

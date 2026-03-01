@@ -1,3 +1,5 @@
+pub mod tracker;
+
 use crate::api::types::Usage;
 use owo_colors::OwoColorize;
 

@@ -17,7 +17,7 @@ cargo fmt -- --check     # Format check
 ## Architecture
 
 - **Single crate** with `lib.rs` (for integration tests) + `main.rs` (binary entry point)
-- Modules: `cli/`, `api/`, `config/`, `output/`, `cost/`, `error.rs`
+- Modules: `cli/`, `api/`, `config/`, `output/`, `cost/`, `interactive/`, `error.rs`
 - Error handling: `thiserror` for typed errors (`PplxError`), `anyhow` at binary boundary
 - Config: layered merge (CLI flags > env vars > TOML file > defaults)
 - Streaming: `reqwest-eventsource` for SSE parsing
@@ -40,6 +40,6 @@ cargo fmt -- --check     # Format check
 ## Phase Status
 
 - Phase 1 (Core MVP): Implemented
-- Phase 2 (Search & Filters): Stub
-- Phase 3 (Advanced): Stub
-- Phase 4 (Polish & Distribution): Partial (CI/CD configured)
+- Phase 2 (Search & Filters): Implemented
+- Phase 3 (Advanced): Implemented
+- Phase 4 (Polish & Distribution): Implemented

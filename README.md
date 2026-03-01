@@ -66,8 +66,78 @@ pplx ask --after 01/01/2025 --context-size high "EU AI Act enforcement updates"
 # Show citations, usage stats, and cost
 pplx ask --citations --usage --cost "Latest developments in fusion energy"
 
+# Reasoning models — show chain-of-thought
+pplx ask -m sonar-reasoning-pro --reasoning "Is P = NP?"
+
+# Save output to file
+pplx ask --save report.md "Summarize recent AI breakthroughs"
+
 # Shell completions
 pplx completions zsh > ~/.zsh/completions/_pplx
+```
+
+### Web Search
+
+```bash
+# Raw web search (returns URLs, titles, snippets)
+pplx search "Rust async runtime benchmarks"
+
+# Multi-query search
+pplx search "Rust tokio" "Rust async-std"
+
+# With filters
+pplx search --domain docs.rs --max-results 5 "serde derive"
+```
+
+### Deep Research
+
+```bash
+# Submit and wait for results
+pplx research "Comprehensive analysis of WebAssembly adoption in 2025"
+
+# Submit async and check later
+pplx research --async "Long research topic"
+pplx research status <job-id>
+pplx research get <job-id>
+
+# List all research jobs
+pplx research list
+```
+
+### Agent API
+
+```bash
+# Use third-party models through Perplexity
+pplx agent -m openai/gpt-4o "Explain monads"
+
+# Enable tools
+pplx agent --tool web_search --tool fetch_url "Latest Rust release notes"
+```
+
+### Interactive REPL
+
+```bash
+# Start a session
+pplx interactive
+
+# In the REPL:
+#   /model sonar-pro     — switch model
+#   /clear               — reset conversation
+#   /cost                — show session costs
+#   /help                — list commands
+#   /quit                — exit
+```
+
+### Config Management
+
+```bash
+# Set defaults
+pplx config set model sonar-pro
+pplx config set output plain
+pplx config set temperature 0.7
+
+# View current config
+pplx config show
 ```
 
 ## Features
@@ -156,10 +226,10 @@ pplx [OPTIONS] [QUERY]... [COMMAND]
 
 Commands:
   ask          Send a query (default if no subcommand given)
-  search       Raw web search via Search API [planned]
-  research     Deep research with async support [planned]
-  agent        Agent API with third-party models [planned]
-  interactive  Start interactive REPL session [planned]
+  search       Raw web search via Search API
+  research     Deep research with async support
+  agent        Agent API with third-party models
+  interactive  Start interactive REPL session
   config       Manage configuration (init, show, set)
   completions  Generate shell completions
 
@@ -196,6 +266,9 @@ Response Enrichment:
       --search-results          Show full search result metadata
       --no-search               Disable web search
       --smart-search            Enable search classifier
+      --reasoning               Show reasoning/thinking blocks
+      --json-schema <SCHEMA>    JSON schema for structured output
+      --save <PATH>             Save response to file
 ```
 
 ## Building from Source
@@ -220,9 +293,9 @@ cargo clippy --all-targets -- -D warnings
 ## Roadmap
 
 - [x] **Phase 1: Core MVP** — `ask` command, streaming, output formats, config, citations, cost, retry, completions
-- [ ] **Phase 2: Search & Filters** — `search` command (Search API), `--json-schema`, `--save`, image/related rendering
-- [ ] **Phase 3: Advanced** — `interactive` REPL, `research` (async deep research), `agent` (third-party models), `<think>` block rendering
-- [ ] **Phase 4: Polish** — Homebrew tap, man pages, expanded test suite, `--version` with git hash
+- [x] **Phase 2: Search & Filters** — `search` command (Search API), `--json-schema`, `--save`, image/related rendering
+- [x] **Phase 3: Advanced** — `interactive` REPL, `research` (async deep research), `agent` (third-party models), `<think>` block rendering
+- [x] **Phase 4: Polish** — man pages, input validation, `config set`, expanded test suite, `--version` with git hash, AUR/Nix packaging
 
 ## License
 
