@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-03-02
+
+### Added
+
+- Structured error handling with semantic exit codes (0-7) for programmatic consumption
+- JSON error output on stdout (`-o json`) with `code`, `message`, `suggestion`, `exit_code` fields
+- `--quiet` / `-q` global flag for bare content output (no formatting, spinners, or metadata)
+- `--no-spinner` global flag to disable progress spinner
+- `pplx describe` command outputting machine-readable JSON capability schema
+- `research --dry-run` flag to preview request JSON without making an API call
+- `cli_version` field injected into all JSON output envelopes
+- Per-subcommand help examples (`pplx ask --help`, `pplx search --help`, etc.)
+- `PplxError` methods: `error_code()`, `exit_code()`, `suggestion()`, `to_json()`
+- Agent usage guide in CLAUDE.md with exit codes, error recovery, and quick reference
+
+### Changed
+
+- `main()` restructured into `main()`/`run()`/`handle_error()` for proper exit code propagation
+- Validation errors (`anyhow::bail!`) converted to `PplxError::Validation` for exit code 2
+- Integration tests fixed to use `--config /dev/null` to bypass user config file
+
 ## [0.2.0] - 2026-03-01
 
 ### Added
