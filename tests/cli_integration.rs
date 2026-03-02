@@ -61,7 +61,7 @@ fn test_completions_bash() {
 #[test]
 fn test_ask_without_api_key() {
     pplx_cmd()
-        .args(["ask", "test query"])
+        .args(["ask", "--config", "/dev/null", "test query"])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -233,7 +233,7 @@ async fn test_api_client_streaming() {
 #[test]
 fn test_search_without_api_key() {
     pplx_cmd()
-        .args(["search", "test query"])
+        .args(["search", "--config", "/dev/null", "test query"])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -347,7 +347,14 @@ async fn test_api_search_auth_error() {
 fn test_json_schema_flag_parsed() {
     // Verify --json-schema flag is accepted by the CLI parser
     pplx_cmd()
-        .args(["ask", "--json-schema", r#"{"type":"object"}"#, "test query"])
+        .args([
+            "ask",
+            "--config",
+            "/dev/null",
+            "--json-schema",
+            r#"{"type":"object"}"#,
+            "test query",
+        ])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -358,7 +365,14 @@ fn test_json_schema_flag_parsed() {
 fn test_save_flag_parsed() {
     // Verify --save flag is accepted by the CLI parser
     pplx_cmd()
-        .args(["ask", "--save", "/tmp/test.md", "test query"])
+        .args([
+            "ask",
+            "--config",
+            "/dev/null",
+            "--save",
+            "/tmp/test.md",
+            "test query",
+        ])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -370,7 +384,7 @@ fn test_save_flag_parsed() {
 #[test]
 fn test_stdin_pipe_without_api_key() {
     pplx_cmd()
-        .arg("ask")
+        .args(["ask", "--config", "/dev/null"])
         .write_stdin("What is Rust?")
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
@@ -556,7 +570,7 @@ async fn test_research_list() {
 #[test]
 fn test_research_without_api_key() {
     pplx_cmd()
-        .args(["research", "test query"])
+        .args(["research", "--config", "/dev/null", "test query"])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -690,7 +704,7 @@ async fn test_agent_auth_error() {
 #[test]
 fn test_agent_without_api_key() {
     pplx_cmd()
-        .args(["agent", "test query"])
+        .args(["agent", "--config", "/dev/null", "test query"])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -702,7 +716,7 @@ fn test_agent_without_api_key() {
 #[test]
 fn test_reasoning_flag_parsed() {
     pplx_cmd()
-        .args(["ask", "--reasoning", "test query"])
+        .args(["ask", "--config", "/dev/null", "--reasoning", "test query"])
         .env_remove("PERPLEXITY_API_KEY")
         .assert()
         .failure()
@@ -750,7 +764,7 @@ fn test_version_contains_hash() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("0.2.0"))
+        .stdout(predicate::str::contains("0.3.0"))
         .stdout(predicate::str::contains("("));
 }
 
@@ -772,4 +786,115 @@ fn test_config_set_invalid_output() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("output"));
+}
+
+// ── Agent-friendliness tests ──
+
+#[test]
+fn test_auth_error_exit_code_3() {
+    pplx_cmd()
+        .args(["ask", "--config", "/dev/null", "test"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .assert()
+        .code(3);
+}
+
+#[test]
+fn test_validation_error_exit_code_2() {
+    pplx_cmd()
+        .args(["ask", "--temperature", "3.0", "test"])
+        .env("PERPLEXITY_API_KEY", "test-key-123")
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn test_json_error_on_auth_failure() {
+    let output = pplx_cmd()
+        .args(["ask", "--config", "/dev/null", "-o", "json", "test"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["error"]["code"], "auth_failed");
+    assert_eq!(json["error"]["exit_code"], 3);
+}
+
+#[test]
+fn test_json_error_on_validation() {
+    let output = pplx_cmd()
+        .args(["ask", "-o", "json", "--temperature", "5.0", "test"])
+        .env("PERPLEXITY_API_KEY", "test-key-123")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["error"]["code"], "validation_error");
+    assert_eq!(json["error"]["exit_code"], 2);
+}
+
+#[test]
+fn test_no_json_error_in_plain_mode() {
+    let output = pplx_cmd()
+        .args(["ask", "--config", "/dev/null", "-o", "plain", "test"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // In plain mode, no JSON error should appear on stdout
+    assert!(stdout.is_empty());
+}
+
+#[test]
+fn test_no_spinner_flag_accepted() {
+    pplx_cmd()
+        .args(["ask", "--config", "/dev/null", "--no-spinner", "test"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_quiet_flag_accepted() {
+    pplx_cmd()
+        .args(["ask", "--config", "/dev/null", "-q", "test"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_describe_outputs_valid_json() {
+    let output = pplx_cmd().args(["describe"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(json["commands"].is_object());
+    assert!(json["exit_codes"].is_object());
+    assert!(json["env_vars"].is_object());
+    assert_eq!(json["name"], "pplx");
+}
+
+#[test]
+fn test_subcommand_help_has_examples() {
+    pplx_cmd()
+        .args(["ask", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Examples:"));
+}
+
+#[test]
+fn test_research_dry_run() {
+    let output = pplx_cmd()
+        .args(["research", "--dry-run", "test query"])
+        .env("PERPLEXITY_API_KEY", "test-key-123")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["model"], "sonar-deep-research");
+    assert!(json["messages"].is_array());
 }

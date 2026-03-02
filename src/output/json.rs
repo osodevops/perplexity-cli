@@ -1,9 +1,22 @@
 use crate::api::types::{ChatCompletionResponse, SearchResponse, StreamResult, Usage};
 
-/// Render full API response as JSON.
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Render full API response as JSON, with cli_version injected.
 pub fn render_response(response: &ChatCompletionResponse) {
-    match serde_json::to_string_pretty(response) {
-        Ok(json) => println!("{json}"),
+    match serde_json::to_value(response) {
+        Ok(mut val) => {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert(
+                    "cli_version".to_string(),
+                    serde_json::Value::String(CLI_VERSION.to_string()),
+                );
+            }
+            match serde_json::to_string_pretty(&val) {
+                Ok(json) => println!("{json}"),
+                Err(e) => eprintln!("Failed to serialize response: {e}"),
+            }
+        }
         Err(e) => eprintln!("Failed to serialize response: {e}"),
     }
 }
@@ -11,6 +24,7 @@ pub fn render_response(response: &ChatCompletionResponse) {
 /// Render stream result as JSON.
 pub fn render_stream_result(result: &StreamResult) {
     let mut output = serde_json::json!({
+        "cli_version": CLI_VERSION,
         "content": result.content,
         "model": result.model,
         "citations": result.citations,
@@ -28,10 +42,21 @@ pub fn render_stream_result(result: &StreamResult) {
     }
 }
 
-/// Render search response as JSON.
+/// Render search response as JSON, with cli_version injected.
 pub fn render_search_response(response: &SearchResponse) {
-    match serde_json::to_string_pretty(response) {
-        Ok(json) => println!("{json}"),
+    match serde_json::to_value(response) {
+        Ok(mut val) => {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert(
+                    "cli_version".to_string(),
+                    serde_json::Value::String(CLI_VERSION.to_string()),
+                );
+            }
+            match serde_json::to_string_pretty(&val) {
+                Ok(json) => println!("{json}"),
+                Err(e) => eprintln!("Failed to serialize search response: {e}"),
+            }
+        }
         Err(e) => eprintln!("Failed to serialize search response: {e}"),
     }
 }

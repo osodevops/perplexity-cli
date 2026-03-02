@@ -19,10 +19,11 @@ use api::types::{
 };
 use cli::args::{Cli, Commands, ConfigAction, ResearchAction};
 use config::types::ResolvedConfig;
+use error::PplxError;
 use output::RenderFinalOpts;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     let cli = Cli::parse();
 
     // Initialize tracing
@@ -39,6 +40,62 @@ async fn main() -> Result<()> {
             .init();
     }
 
+    let output_format = resolve_output_format(&cli);
+
+    if let Err(err) = run(cli).await {
+        handle_error(err, &output_format);
+    }
+}
+
+/// Resolve output format from CLI arg or env var (lightweight, infallible).
+fn resolve_output_format(cli: &Cli) -> String {
+    cli.output
+        .map(|o| match o {
+            cli::args::OutputFormat::Md => "md",
+            cli::args::OutputFormat::Plain => "plain",
+            cli::args::OutputFormat::Json => "json",
+            cli::args::OutputFormat::Raw => "raw",
+        })
+        .map(String::from)
+        .or_else(|| std::env::var("PPLX_OUTPUT").ok())
+        .unwrap_or_else(|| "md".to_string())
+}
+
+/// Handle errors with structured output and semantic exit codes.
+fn handle_error(err: anyhow::Error, output_format: &str) {
+    use std::io::Write;
+
+    if let Some(pplx_err) = err.downcast_ref::<PplxError>() {
+        if output_format == "json" {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&pplx_err.to_json()).unwrap()
+            );
+        }
+        eprintln!("Error: {pplx_err}");
+        eprintln!("Hint: {}", pplx_err.suggestion());
+        let _ = std::io::stdout().flush();
+        std::process::exit(pplx_err.exit_code());
+    } else {
+        // Non-PplxError fallback
+        if output_format == "json" {
+            let json = serde_json::json!({
+                "error": {
+                    "code": "internal_error",
+                    "message": err.to_string(),
+                    "suggestion": "Report this bug at https://github.com/sionsmith/pplx/issues",
+                    "exit_code": 1,
+                }
+            });
+            println!("{}", serde_json::to_string_pretty(&json).unwrap());
+        }
+        eprintln!("Error: {err:#}");
+        let _ = std::io::stdout().flush();
+        std::process::exit(1);
+    }
+}
+
+async fn run(cli: Cli) -> Result<()> {
     let file_config = config::load_file_config(cli.config.as_deref());
     let resolved = config::resolve(&cli, &file_config)?;
 
@@ -53,6 +110,9 @@ async fn main() -> Result<()> {
         Some(Commands::Interactive) => {
             return interactive::run_interactive(&resolved).await;
         }
+        Some(Commands::Describe) => {
+            return run_describe();
+        }
         Some(Commands::Search {
             query,
             max_results,
@@ -60,7 +120,10 @@ async fn main() -> Result<()> {
             country,
         }) => {
             if query.is_empty() {
-                anyhow::bail!("Search query required. Usage: pplx search <query>");
+                return Err(PplxError::Validation(
+                    "Search query required. Usage: pplx search <query>".to_string(),
+                )
+                .into());
             }
             run_search(
                 query,
@@ -75,8 +138,9 @@ async fn main() -> Result<()> {
             action,
             query,
             async_mode,
+            dry_run,
         }) => {
-            run_research(action.as_ref(), query, *async_mode, &resolved).await?;
+            run_research(action.as_ref(), query, *async_mode, *dry_run, &resolved).await?;
         }
         Some(Commands::Agent {
             query,
@@ -84,7 +148,10 @@ async fn main() -> Result<()> {
             max_steps: _,
         }) => {
             if query.is_empty() {
-                anyhow::bail!("Agent query required. Usage: pplx agent <query>");
+                return Err(PplxError::Validation(
+                    "Agent query required. Usage: pplx agent <query>".to_string(),
+                )
+                .into());
             }
             run_agent(query, tools, &resolved).await?;
         }
@@ -128,12 +195,19 @@ async fn run_ask(query_parts: &[String], config: &ResolvedConfig) -> Result<()> 
     }
 
     if query.trim().is_empty() {
-        anyhow::bail!("No query provided. Usage: pplx \"your question here\"");
+        return Err(PplxError::Validation(
+            "No query provided. Usage: pplx \"your question here\"".to_string(),
+        )
+        .into());
     }
 
     // Determine effective color/spinner settings
-    let use_color = !config.no_color && is_stdout_tty;
-    let use_spinner = is_stdout_tty && !config.no_stream && config.output_format != "json";
+    let use_color = !config.no_color && !config.quiet && is_stdout_tty;
+    let use_spinner = is_stdout_tty
+        && !config.no_stream
+        && config.output_format != "json"
+        && !config.no_spinner
+        && !config.quiet;
 
     let client = ApiClient::new(&config.api_key).context("Failed to create API client")?;
 
@@ -211,40 +285,44 @@ async fn run_ask(query_parts: &[String], config: &ResolvedConfig) -> Result<()> 
             .map(|c| c.message.content.as_str())
             .unwrap_or("");
 
-        // Parse and render think blocks from non-streaming response
-        if config.show_reasoning {
-            let (thinking, clean) = extract_think_blocks(content);
-            if let Some(ref thinking_text) = thinking {
-                render_thinking_block(thinking_text, &config.output_format, use_color);
-            }
-            match config.output_format.as_str() {
-                "json" => output::json::render_response(&response),
-                "plain" | "raw" => output::plain::render_full(&clean),
-                _ => output::markdown::render_full(&clean, use_color),
-            }
+        if config.quiet {
+            print!("{content}");
         } else {
-            match config.output_format.as_str() {
-                "json" => output::json::render_response(&response),
-                "plain" | "raw" => output::plain::render_full(content),
-                _ => output::markdown::render_full(content, use_color),
+            // Parse and render think blocks from non-streaming response
+            if config.show_reasoning {
+                let (thinking, clean) = extract_think_blocks(content);
+                if let Some(ref thinking_text) = thinking {
+                    render_thinking_block(thinking_text, &config.output_format, use_color);
+                }
+                match config.output_format.as_str() {
+                    "json" => output::json::render_response(&response),
+                    "plain" | "raw" => output::plain::render_full(&clean),
+                    _ => output::markdown::render_full(&clean, use_color),
+                }
+            } else {
+                match config.output_format.as_str() {
+                    "json" => output::json::render_response(&response),
+                    "plain" | "raw" => output::plain::render_full(content),
+                    _ => output::markdown::render_full(content, use_color),
+                }
             }
-        }
 
-        output::render_final(&RenderFinalOpts {
-            format: &config.output_format,
-            show_citations: config.show_citations,
-            show_usage: config.show_usage,
-            show_cost: config.show_cost,
-            show_images: config.images,
-            show_related: config.related,
-            show_search_results: config.search_results,
-            use_color,
-            citations: response.citations.as_deref(),
-            usage: response.usage.as_ref(),
-            images: response.images.as_deref(),
-            related: response.related_questions.as_deref(),
-            search_results: response.search_results.as_deref(),
-        });
+            output::render_final(&RenderFinalOpts {
+                format: &config.output_format,
+                show_citations: config.show_citations,
+                show_usage: config.show_usage,
+                show_cost: config.show_cost,
+                show_images: config.images,
+                show_related: config.related,
+                show_search_results: config.search_results,
+                use_color,
+                citations: response.citations.as_deref(),
+                usage: response.usage.as_ref(),
+                images: response.images.as_deref(),
+                related: response.related_questions.as_deref(),
+                search_results: response.search_results.as_deref(),
+            });
+        }
 
         save_content = if config.output_format == "json" {
             serde_json::to_string_pretty(&response).unwrap_or_default()
@@ -309,30 +387,34 @@ async fn run_ask(query_parts: &[String], config: &ResolvedConfig) -> Result<()> 
 
         let result = result?;
 
-        // Newline after streamed content
-        if config.output_format != "json" && !result.content.is_empty() {
-            println!();
-        }
+        if config.quiet {
+            print!("{}", result.content);
+        } else {
+            // Newline after streamed content
+            if config.output_format != "json" && !result.content.is_empty() {
+                println!();
+            }
 
-        if config.output_format == "json" {
-            output::json::render_stream_result(&result);
-        }
+            if config.output_format == "json" {
+                output::json::render_stream_result(&result);
+            }
 
-        output::render_final(&RenderFinalOpts {
-            format: &config.output_format,
-            show_citations: config.show_citations,
-            show_usage: config.show_usage,
-            show_cost: config.show_cost,
-            show_images: config.images,
-            show_related: config.related,
-            show_search_results: config.search_results,
-            use_color,
-            citations: result.citations.as_deref(),
-            usage: result.usage.as_ref(),
-            images: result.images.as_deref(),
-            related: result.related_questions.as_deref(),
-            search_results: result.search_results.as_deref(),
-        });
+            output::render_final(&RenderFinalOpts {
+                format: &config.output_format,
+                show_citations: config.show_citations,
+                show_usage: config.show_usage,
+                show_cost: config.show_cost,
+                show_images: config.images,
+                show_related: config.related,
+                show_search_results: config.search_results,
+                use_color,
+                citations: result.citations.as_deref(),
+                usage: result.usage.as_ref(),
+                images: result.images.as_deref(),
+                related: result.related_questions.as_deref(),
+                search_results: result.search_results.as_deref(),
+            });
+        }
 
         save_content = result.content;
     }
@@ -352,8 +434,9 @@ async fn run_search(
     config: &ResolvedConfig,
 ) -> Result<()> {
     let is_stdout_tty = is_terminal::is_terminal(std::io::stdout());
-    let use_color = !config.no_color && is_stdout_tty;
-    let use_spinner = is_stdout_tty && config.output_format != "json";
+    let use_color = !config.no_color && !config.quiet && is_stdout_tty;
+    let use_spinner =
+        is_stdout_tty && config.output_format != "json" && !config.no_spinner && !config.quiet;
 
     let client = ApiClient::new(&config.api_key).context("Failed to create API client")?;
 
@@ -428,10 +511,11 @@ async fn run_research(
     action: Option<&ResearchAction>,
     query: &[String],
     async_mode: bool,
+    dry_run: bool,
     config: &ResolvedConfig,
 ) -> Result<()> {
     let is_stdout_tty = is_terminal::is_terminal(std::io::stdout());
-    let use_color = !config.no_color && is_stdout_tty;
+    let use_color = !config.no_color && !config.quiet && is_stdout_tty;
 
     let client = ApiClient::new(&config.api_key).context("Failed to create API client")?;
 
@@ -483,7 +567,10 @@ async fn run_research(
         None => {
             // Submit new research job
             if query.is_empty() {
-                anyhow::bail!("Research query required. Usage: pplx research <query>");
+                return Err(PplxError::Validation(
+                    "Research query required. Usage: pplx research <query>".to_string(),
+                )
+                .into());
             }
 
             let query_text = query.join(" ");
@@ -505,6 +592,15 @@ async fn run_research(
                 search_mode: config.search_mode.clone(),
                 search_context_size: config.search_context_size.clone(),
             };
+
+            if dry_run {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&request)
+                        .unwrap_or_else(|_| format!("{request:?}"))
+                );
+                return Ok(());
+            }
 
             let submit = client.research_submit(&request).await?;
 
@@ -528,8 +624,9 @@ async fn poll_research_until_complete(
     config: &ResolvedConfig,
 ) -> Result<()> {
     let is_stdout_tty = is_terminal::is_terminal(std::io::stdout());
-    let use_color = !config.no_color && is_stdout_tty;
-    let use_spinner = is_stdout_tty && config.output_format != "json";
+    let use_color = !config.no_color && !config.quiet && is_stdout_tty;
+    let use_spinner =
+        is_stdout_tty && config.output_format != "json" && !config.no_spinner && !config.quiet;
 
     let spinner = if use_spinner {
         let sp = ProgressBar::new_spinner();
@@ -632,8 +729,9 @@ async fn run_agent(
     config: &ResolvedConfig,
 ) -> Result<()> {
     let is_stdout_tty = is_terminal::is_terminal(std::io::stdout());
-    let use_color = !config.no_color && is_stdout_tty;
-    let use_spinner = is_stdout_tty && config.output_format != "json";
+    let use_color = !config.no_color && !config.quiet && is_stdout_tty;
+    let use_spinner =
+        is_stdout_tty && config.output_format != "json" && !config.no_spinner && !config.quiet;
 
     let client = ApiClient::new(&config.api_key).context("Failed to create API client")?;
 
@@ -683,34 +781,38 @@ async fn run_agent(
     let text = output::extract_agent_text(&response);
     let citations = output::extract_agent_citations(&response);
 
-    match config.output_format.as_str() {
-        "json" => {
-            if let Ok(json) = serde_json::to_string_pretty(&response) {
-                println!("{json}");
+    if config.quiet {
+        print!("{text}");
+    } else {
+        match config.output_format.as_str() {
+            "json" => {
+                if let Ok(json) = serde_json::to_string_pretty(&response) {
+                    println!("{json}");
+                }
             }
+            "plain" | "raw" => output::plain::render_full(&text),
+            _ => output::markdown::render_full(&text, use_color),
         }
-        "plain" | "raw" => output::plain::render_full(&text),
-        _ => output::markdown::render_full(&text, use_color),
-    }
 
-    // Show citations if present
-    if config.show_citations && !citations.is_empty() {
-        output::citations::render_citations(&citations, use_color);
-    }
+        // Show citations if present
+        if config.show_citations && !citations.is_empty() {
+            output::citations::render_citations(&citations, use_color);
+        }
 
-    // Show usage if present
-    if config.show_usage {
-        if let Some(ref usage) = response.usage {
-            println!();
-            if use_color {
-                use owo_colors::OwoColorize;
-                println!("{}", "Usage:".bold());
-            } else {
-                println!("Usage:");
+        // Show usage if present
+        if config.show_usage {
+            if let Some(ref usage) = response.usage {
+                println!();
+                if use_color {
+                    use owo_colors::OwoColorize;
+                    println!("{}", "Usage:".bold());
+                } else {
+                    println!("Usage:");
+                }
+                println!("  Input tokens:  {}", usage.input_tokens);
+                println!("  Output tokens: {}", usage.output_tokens);
+                println!("  Total tokens:  {}", usage.total_tokens);
             }
-            println!("  Input tokens:  {}", usage.input_tokens);
-            println!("  Output tokens: {}", usage.output_tokens);
-            println!("  Total tokens:  {}", usage.total_tokens);
         }
     }
 
@@ -824,6 +926,101 @@ fn build_domain_filter(include: &[String], exclude: &[String]) -> Option<Vec<Str
         filters.push(format!("-{domain}"));
     }
     Some(filters)
+}
+
+fn run_describe() -> Result<()> {
+    let schema = serde_json::json!({
+        "name": "pplx",
+        "version": env!("CARGO_PKG_VERSION"),
+        "description": "Perplexity API client for the terminal",
+        "commands": {
+            "ask": {
+                "description": "Send a query to Perplexity (default command)",
+                "args": ["query"],
+                "key_flags": ["--model", "--output", "--system", "--no-stream", "--temperature", "--reasoning"]
+            },
+            "search": {
+                "description": "Raw web search via Search API",
+                "args": ["query"],
+                "key_flags": ["--max-results", "--country", "--domain", "--recency"]
+            },
+            "research": {
+                "description": "Deep research with async support",
+                "args": ["query"],
+                "subcommands": ["status <id>", "list", "get <id>"],
+                "key_flags": ["--async", "--dry-run"]
+            },
+            "agent": {
+                "description": "Use Agent API with third-party models",
+                "args": ["query"],
+                "key_flags": ["--tool", "--max-steps"]
+            },
+            "interactive": {
+                "description": "Start interactive REPL session"
+            },
+            "config": {
+                "description": "Manage configuration",
+                "subcommands": ["init", "show", "set <key> <value>"]
+            },
+            "describe": {
+                "description": "Output this machine-readable capability schema"
+            },
+            "completions": {
+                "description": "Generate shell completions",
+                "args": ["shell"]
+            }
+        },
+        "global_flags": [
+            "--model / -m",
+            "--output / -o (md|plain|json|raw)",
+            "--system / -s",
+            "--quiet / -q",
+            "--no-stream",
+            "--no-spinner",
+            "--no-color",
+            "--verbose",
+            "--citations / -c",
+            "--usage / -u",
+            "--cost",
+            "--save <path>",
+            "--temperature / -t",
+            "--top-p",
+            "--reasoning",
+            "--images",
+            "--related",
+            "--search-results"
+        ],
+        "exit_codes": {
+            "0": "success",
+            "1": "general error",
+            "2": "validation / config error",
+            "3": "authentication failed",
+            "4": "rate limited",
+            "5": "server / stream / research error",
+            "6": "not found (404)",
+            "7": "network / HTTP error"
+        },
+        "env_vars": {
+            "PERPLEXITY_API_KEY": "API authentication (required)",
+            "PPLX_MODEL": "Default model",
+            "PPLX_OUTPUT": "Default output format",
+            "PPLX_CONTEXT_SIZE": "Default search context size",
+            "NO_COLOR": "Disable colour output (standard)"
+        },
+        "error_format": {
+            "description": "With -o json, errors are emitted to stdout as structured JSON",
+            "schema": {
+                "error": {
+                    "code": "string (machine-readable)",
+                    "message": "string (human-readable)",
+                    "suggestion": "string (actionable fix)",
+                    "exit_code": "integer"
+                }
+            }
+        }
+    });
+    println!("{}", serde_json::to_string_pretty(&schema).unwrap());
+    Ok(())
 }
 
 fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<()> {

@@ -48,6 +48,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Quiet mode: output only the response content, no metadata or formatting
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+
+    /// Disable progress spinner
+    #[arg(long, global = true)]
+    pub no_spinner: bool,
+
     /// Verbose/debug output
     #[arg(long, global = true)]
     pub verbose: bool,
@@ -147,6 +155,9 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Send a query to Perplexity
+    #[command(
+        after_help = "Examples:\n  pplx ask \"What is Rust?\"\n  pplx ask -m sonar-pro \"Explain quantum computing\"\n  pplx ask --no-stream -o json \"test\" | jq .\n  pplx ask -q \"quick answer\" # bare text, no formatting\n  echo \"summarize this\" | pplx ask"
+    )]
     Ask {
         /// The query to ask
         #[arg(trailing_var_arg = true)]
@@ -154,6 +165,9 @@ pub enum Commands {
     },
 
     /// Raw web search via Search API
+    #[command(
+        after_help = "Examples:\n  pplx search \"Rust programming\"\n  pplx search --max-results 5 \"AI news\"\n  pplx search --domain arxiv.org \"machine learning\"\n  pplx search -o json \"query\" | jq .results"
+    )]
     Search {
         /// The search query (multiple values for multi-query)
         #[arg(trailing_var_arg = true)]
@@ -173,6 +187,9 @@ pub enum Commands {
     },
 
     /// Deep research with async support
+    #[command(
+        after_help = "Examples:\n  pplx research \"Analyze the Rust ecosystem\"\n  pplx research --async \"Deep analysis\" # returns job ID\n  pplx research status <job-id>\n  pplx research get <job-id>\n  pplx research --dry-run \"Preview request\""
+    )]
     Research {
         #[command(subcommand)]
         action: Option<ResearchAction>,
@@ -184,9 +201,16 @@ pub enum Commands {
         /// Submit and return immediately (don't wait for result)
         #[arg(long = "async")]
         async_mode: bool,
+
+        /// Print the request as JSON without making an API call
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Use Agent API with third-party models
+    #[command(
+        after_help = "Examples:\n  pplx agent \"Latest AI news\"\n  pplx agent --tool web_search \"Search and summarize\"\n  pplx agent -m openai/gpt-4o \"test query\""
+    )]
     Agent {
         /// The query
         #[arg(trailing_var_arg = true)]
@@ -202,7 +226,11 @@ pub enum Commands {
     },
 
     /// Start interactive REPL session
+    #[command(after_help = "Examples:\n  pplx interactive\n  pplx interactive -m sonar-pro")]
     Interactive,
+
+    /// Output machine-readable capability schema (JSON)
+    Describe,
 
     /// Manage configuration
     Config {

@@ -53,6 +53,8 @@ pub struct ResolvedConfig {
     pub search_exclude_domains: Vec<String>,
     pub no_stream: bool,
     pub no_color: bool,
+    pub quiet: bool,
+    pub no_spinner: bool,
     pub max_tokens: Option<u32>,
     pub top_p: Option<f32>,
     pub reasoning_effort: Option<String>,
