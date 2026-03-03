@@ -5,11 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.3.1] - 2026-03-03
+## [0.3.2] - 2026-03-03
 
 ### Fixed
 
 - `pplx config init` now prompts to update API key when config already exists instead of just exiting
+- Fix Homebrew formula: ARM Mac URL was pointing to source tarball instead of prebuilt binary
+- Fix auto-tag workflow to use PAT so it triggers the release pipeline automatically
 
 ## [0.3.0] - 2026-03-02
 
