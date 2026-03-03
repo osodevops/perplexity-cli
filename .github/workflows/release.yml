@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag-name:
-        description: "Tag to release (e.g. v0.3.4)"
+        description: "Tag to release (e.g. v0.3.5)"
         required: true
 
 env:
@@ -23,11 +23,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG_NAME }}
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          changelog: CHANGELOG.md
-          ref: ${{ env.TAG_NAME }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          VERSION="${TAG_NAME#v}"
+          # Extract the section for this version from CHANGELOG.md
+          BODY=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
+          # Write to file for gh release create
+          echo "$BODY" > release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "$TAG_NAME" \
+            --notes-file release_notes.md
 
   upload-assets:
     needs: create-release
@@ -51,12 +63,29 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/upload-rust-binary-action@v1
-        with:
-          bin: pplx
-          target: ${{ matrix.target }}
-          ref: ${{ env.TAG_NAME }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../pplx-${{ matrix.target }}.tar.gz pplx
+          cd ../../..
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../pplx-${{ matrix.target }}.zip pplx.exe
+          cd ../../..
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$TAG_NAME" pplx-${{ matrix.target }}.* --clobber
 
   homebrew:
     needs: upload-assets
