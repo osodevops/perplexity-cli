@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,16 +28,24 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create tag
+      - name: Check if tag exists
         if: steps.version.outputs.changed == 'true'
+        id: tag-check
         run: |
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Trigger release
-        if: steps.version.outputs.changed == 'true'
+      - name: Create and push tag
+        if: steps.version.outputs.changed == 'true' && steps.tag-check.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Use PAT instead of GITHUB_TOKEN so the tag push triggers the Release workflow.
+          # Tags pushed by GITHUB_TOKEN don't trigger downstream workflows (GitHub Actions limitation).
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          gh workflow run release.yml \
-            -f tag-name="v${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
