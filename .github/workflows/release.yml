@@ -41,6 +41,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -56,14 +59,13 @@ jobs:
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../pplx-${{ matrix.target }}.tar.gz pplx
-          cd ../../..
 
       - name: Package (windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           cd target/${{ matrix.target }}/release
           7z a ../../../pplx-${{ matrix.target }}.zip pplx.exe
-          cd ../../..
 
       - name: Upload assets
         env:
@@ -137,3 +139,15 @@ jobs:
           git add Formula/pplx.rb
           git commit -m "pplx ${VERSION}"
           git push
+
+  scoop:
+    needs: upload-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Scoop bucket update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          repository: osodevops/scoop-bucket
+          event-type: update-pplx-manifest
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "tag": "${{ github.ref_name }}"}'
