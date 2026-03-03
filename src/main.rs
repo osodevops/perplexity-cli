@@ -1033,7 +1033,19 @@ fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<
 
             if config_path.exists() {
                 eprintln!("Config file already exists at: {}", config_path.display());
-                eprintln!("Edit it directly or use `pplx config set <key> <value>`");
+                eprint!("Re-enter your Perplexity API key (leave blank to keep current): ");
+                let mut api_key = String::new();
+                std::io::stdin()
+                    .read_line(&mut api_key)
+                    .context("Failed to read API key")?;
+                let api_key = api_key.trim();
+
+                if api_key.is_empty() {
+                    eprintln!("API key unchanged.");
+                } else {
+                    config::set_config_value("api_key", api_key)?;
+                    eprintln!("API key updated.");
+                }
                 return Ok(());
             }
 
