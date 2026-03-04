@@ -7,6 +7,10 @@ Query the web from your terminal with real-time streaming, markdown rendering, c
 [![CI](https://github.com/osodevops/perplexity-cli/actions/workflows/test.yml/badge.svg)](https://github.com/osodevops/perplexity-cli/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="recordings/ask-basic-github-optimised.gif" alt="pplx demo" width="800">
+</p>
+
 ## Install
 
 ```bash
