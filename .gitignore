@@ -5,3 +5,5 @@
 *.swo
 *~
 .env
+recordings/*
+!recordings/ask-basic-github-optimised.gif
