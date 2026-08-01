@@ -18,7 +18,7 @@ use api::types::{
     ResponseFormat, SearchQuery, SearchRequest,
 };
 use cli::args::{Cli, Commands, ConfigAction, ResearchAction};
-use config::types::ResolvedConfig;
+use config::types::{ApiKeySource, ResolvedConfig};
 use error::PplxError;
 use output::RenderFinalOpts;
 
@@ -105,7 +105,7 @@ async fn run(cli: Cli) -> Result<()> {
             return Ok(());
         }
         Some(Commands::Config { action }) => {
-            return run_config(action.as_ref(), &resolved);
+            return run_config(action.as_ref(), &resolved, cli.config.as_deref());
         }
         Some(Commands::Interactive) => {
             return interactive::run_interactive(&resolved).await;
@@ -1023,13 +1023,17 @@ fn run_describe() -> Result<()> {
     Ok(())
 }
 
-fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<()> {
+fn run_config(
+    action: Option<&ConfigAction>,
+    config: &ResolvedConfig,
+    config_path_override: Option<&str>,
+) -> Result<()> {
     match action {
         Some(ConfigAction::Init) => {
-            let config_dir = dirs::config_dir()
-                .map(|d| d.join("pplx"))
+            let config_path = config_path_override
+                .map(std::path::PathBuf::from)
+                .or_else(config::default_config_path)
                 .context("Could not determine config directory")?;
-            let config_path = config_dir.join("config.toml");
 
             if config_path.exists() {
                 eprintln!("Config file already exists at: {}", config_path.display());
@@ -1043,8 +1047,9 @@ fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<
                 if api_key.is_empty() {
                     eprintln!("API key unchanged.");
                 } else {
-                    config::set_config_value("api_key", api_key)?;
+                    config::set_config_value_at("api_key", api_key, config_path_override)?;
                     eprintln!("API key updated.");
+                    warn_if_env_api_key_overrides_config();
                 }
                 return Ok(());
             }
@@ -1063,7 +1068,9 @@ fn run_config(action: Option<&ConfigAction>, config: &ResolvedConfig) -> Result<
                 );
             }
 
-            std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
+            if let Some(config_dir) = config_path.parent() {
+                std::fs::create_dir_all(config_dir).context("Failed to create config directory")?;
+            }
 
             let config_content = format!(
                 r#"[auth]
@@ -1088,6 +1095,7 @@ output = "md"
             std::fs::write(&config_path, config_content).context("Failed to write config file")?;
 
             println!("Config created at: {}", config_path.display());
+            warn_if_env_api_key_overrides_config();
             println!("You're ready to go! Try: pplx \"What is Rust?\"");
             Ok(())
         }
@@ -1118,16 +1126,16 @@ output = "md"
             if !config.search_exclude_domains.is_empty() {
                 println!("  exclude:       {:?}", config.search_exclude_domains);
             }
-            println!(
-                "  api_key:       {}",
-                if config.api_key.is_empty() {
-                    "(not set)"
-                } else {
-                    "(set)"
-                }
-            );
+            let api_key_status = match config.api_key_source {
+                ApiKeySource::Environment => "(set via PERPLEXITY_API_KEY)",
+                ApiKeySource::ConfigFile => "(set via config file)",
+                ApiKeySource::None => "(not set)",
+            };
+            println!("  api_key:       {api_key_status}");
 
-            let config_path = dirs::config_dir().map(|d| d.join("pplx").join("config.toml"));
+            let config_path = config_path_override
+                .map(std::path::PathBuf::from)
+                .or_else(config::default_config_path);
             if let Some(path) = config_path {
                 if path.exists() {
                     println!("\n  config file:   {}", path.display());
@@ -1138,8 +1146,13 @@ output = "md"
             Ok(())
         }
         Some(ConfigAction::Set { key, value }) => {
-            config::set_config_value(key, value)?;
-            println!("Set {key} = {value}");
+            config::set_config_value_at(key, value, config_path_override)?;
+            if key == "api_key" {
+                println!("API key updated in config file.");
+                warn_if_env_api_key_overrides_config();
+            } else {
+                println!("Set {key} = {value}");
+            }
             Ok(())
         }
         None => {
@@ -1151,5 +1164,13 @@ output = "md"
             println!("  set     Set a configuration value");
             Ok(())
         }
+    }
+}
+
+fn warn_if_env_api_key_overrides_config() {
+    let env_key_is_set = std::env::var("PERPLEXITY_API_KEY").is_ok_and(|key| !key.is_empty());
+    if env_key_is_set {
+        eprintln!("Warning: PERPLEXITY_API_KEY is set and overrides the key saved in config.toml.");
+        eprintln!("Unset it (and remove it from your shell startup file) to use the saved key.");
     }
 }

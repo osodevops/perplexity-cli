@@ -1,5 +1,13 @@
 use serde::Deserialize;
 
+/// Where the effective API key was loaded from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApiKeySource {
+    Environment,
+    ConfigFile,
+    None,
+}
+
 /// Configuration loaded from TOML file. All fields optional.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
@@ -40,6 +48,7 @@ pub struct SearchDefaults {
 #[derive(Debug)]
 pub struct ResolvedConfig {
     pub api_key: String,
+    pub api_key_source: ApiKeySource,
     pub model: String,
     pub output_format: String,
     pub show_citations: bool,

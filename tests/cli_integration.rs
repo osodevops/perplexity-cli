@@ -788,6 +788,72 @@ fn test_config_set_invalid_output() {
         .stderr(predicate::str::contains("output"));
 }
 
+#[test]
+fn test_config_show_identifies_environment_api_key() {
+    pplx_cmd()
+        .args(["--config", "/dev/null", "config", "show"])
+        .env("PERPLEXITY_API_KEY", "test-key-123")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "api_key:       (set via PERPLEXITY_API_KEY)",
+        ));
+}
+
+#[test]
+fn test_config_show_identifies_config_file_api_key() {
+    let mut temp = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut temp, b"[auth]\napi_key = \"test-key-123\"\n").unwrap();
+
+    pplx_cmd()
+        .args(["--config", temp.path().to_str().unwrap(), "config", "show"])
+        .env_remove("PERPLEXITY_API_KEY")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "api_key:       (set via config file)",
+        ));
+}
+
+#[test]
+fn test_config_init_warns_when_environment_key_overrides_saved_key() {
+    let mut temp = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut temp, b"[auth]\napi_key = \"old-key\"\n").unwrap();
+
+    pplx_cmd()
+        .args(["--config", temp.path().to_str().unwrap(), "config", "init"])
+        .env("PERPLEXITY_API_KEY", "environment-key")
+        .write_stdin("new-config-key\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "PERPLEXITY_API_KEY is set and overrides",
+        ));
+
+    let saved = std::fs::read_to_string(temp.path()).unwrap();
+    assert!(saved.contains("new-config-key"));
+    assert!(!saved.contains("old-key"));
+}
+
+#[test]
+fn test_config_set_does_not_echo_api_key() {
+    let temp = tempfile::NamedTempFile::new().unwrap();
+    pplx_cmd()
+        .args([
+            "--config",
+            temp.path().to_str().unwrap(),
+            "config",
+            "set",
+            "api_key",
+            "secret-key-value",
+        ])
+        .env_remove("PERPLEXITY_API_KEY")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("API key updated"))
+        .stdout(predicate::str::contains("secret-key-value").not());
+}
+
 // ── Agent-friendliness tests ──
 
 #[test]

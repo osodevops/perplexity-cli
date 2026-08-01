@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::cli::args::Cli;
 use crate::error::PplxError;
-use types::{FileConfig, ResolvedConfig};
+use types::{ApiKeySource, FileConfig, ResolvedConfig};
 
 /// Returns the config file path: $XDG_CONFIG_HOME/pplx/config.toml
 pub fn default_config_path() -> Option<PathBuf> {
@@ -24,8 +24,12 @@ const KNOWN_CONFIG_KEYS: &[&str] = &[
     "show_usage",
 ];
 
-/// Set a configuration value in the TOML config file, preserving formatting.
-pub fn set_config_value(key: &str, value: &str) -> Result<(), PplxError> {
+/// Set a configuration value at an optional custom config path.
+pub fn set_config_value_at(
+    key: &str,
+    value: &str,
+    path_override: Option<&str>,
+) -> Result<(), PplxError> {
     use std::io::Write;
 
     if !KNOWN_CONFIG_KEYS.contains(&key) {
@@ -73,17 +77,17 @@ pub fn set_config_value(key: &str, value: &str) -> Result<(), PplxError> {
                 )));
             }
         },
-        "show_citations" | "show_cost" | "show_usage" => {
-            if value != "true" && value != "false" {
-                return Err(PplxError::Validation(format!(
-                    "{key} must be 'true' or 'false', got '{value}'"
-                )));
-            }
+        "show_citations" | "show_cost" | "show_usage" if value != "true" && value != "false" => {
+            return Err(PplxError::Validation(format!(
+                "{key} must be 'true' or 'false', got '{value}'"
+            )));
         }
         _ => {} // model, api_key — any string is fine
     }
 
-    let config_path = default_config_path()
+    let config_path = path_override
+        .map(PathBuf::from)
+        .or_else(default_config_path)
         .ok_or_else(|| PplxError::Config("could not determine config directory".to_string()))?;
 
     // Read existing file or start empty
@@ -179,11 +183,17 @@ pub fn load_file_config(path_override: Option<&str>) -> FileConfig {
 pub fn resolve(cli: &Cli, file: &FileConfig) -> Result<ResolvedConfig, PplxError> {
     let search = file.defaults.search.as_ref();
 
-    // API key: CLI env already handled by clap env, then file config
-    let api_key = std::env::var("PERPLEXITY_API_KEY")
+    let env_api_key = std::env::var("PERPLEXITY_API_KEY")
         .ok()
-        .or_else(|| file.auth.api_key.clone())
-        .unwrap_or_default();
+        .filter(|key| !key.is_empty());
+    let file_api_key = file.auth.api_key.clone().filter(|key| !key.is_empty());
+    let (api_key, api_key_source) = if let Some(key) = env_api_key {
+        (key, ApiKeySource::Environment)
+    } else if let Some(key) = file_api_key {
+        (key, ApiKeySource::ConfigFile)
+    } else {
+        (String::new(), ApiKeySource::None)
+    };
 
     let model = cli
         .model
@@ -273,6 +283,7 @@ pub fn resolve(cli: &Cli, file: &FileConfig) -> Result<ResolvedConfig, PplxError
 
     Ok(ResolvedConfig {
         api_key,
+        api_key_source,
         model,
         output_format,
         show_citations,
@@ -447,19 +458,19 @@ exclude_domains = ["pinterest.com"]
 
     #[test]
     fn test_set_config_unknown_key() {
-        let err = set_config_value("nonexistent_key", "value").unwrap_err();
+        let err = set_config_value_at("nonexistent_key", "value", None).unwrap_err();
         assert!(err.to_string().contains("unknown config key"));
     }
 
     #[test]
     fn test_set_config_invalid_temperature() {
-        let err = set_config_value("temperature", "5.0").unwrap_err();
+        let err = set_config_value_at("temperature", "5.0", None).unwrap_err();
         assert!(err.to_string().contains("temperature"));
     }
 
     #[test]
     fn test_set_config_invalid_output() {
-        let err = set_config_value("output", "xml").unwrap_err();
+        let err = set_config_value_at("output", "xml", None).unwrap_err();
         assert!(err.to_string().contains("output"));
     }
 }

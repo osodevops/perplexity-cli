@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-08-01
+
+### Fixed
+
+- Show whether the effective API key comes from `PERPLEXITY_API_KEY` or the config file
+- Warn when `PERPLEXITY_API_KEY` overrides a key saved by `config init` or `config set`
+- Treat an empty `PERPLEXITY_API_KEY` as unset so the config-file key can be used
+- Honour `--config` paths consistently for `config init`, `config show`, and `config set`
+- Avoid printing API key values after `pplx config set api_key`
+
+### Security
+
+- Update transitive dependencies to resolve current RustSec advisories
+
 ## [0.3.2] - 2026-03-03
 
 ### Fixed
